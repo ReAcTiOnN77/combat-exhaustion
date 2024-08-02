@@ -1,3 +1,15 @@
 {
-    "MODULE.hello": "hello"
+	"combat-exhaustion": {
+		"settings": {
+			"exhaustionMode": {
+				"name": "Exhaustion Mode",
+				"hint": "Select how exhaustion is applied: after combat, during combat, or always.",
+				"choices": {
+					"afterCombat": "Apply After Combat",
+					"duringCombat": "Apply During Combat",
+					"always": "Always Apply"
+				}
+			}
+		}
+	}
 }
