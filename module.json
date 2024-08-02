@@ -1,34 +1,34 @@
 {
-  "id": "module",
-  "title": "New Module",
-  "description": "",
+  "id": "combat-exhaustion",
+  "title": "Combat Exhaustion",
+  "description": "Simple Module for adding exhaustion depending on the amount of downs a player has received",
   "version": "#{VERSION}#",
   "library": "false",
   "manifestPlusVersion": "1.2.0",
   "compatibility": {
-    "minimum": 10,
-    "verified": 10,
-    "maximum": 11
+    "minimum": 11,
+    "verified": 11,
+    "maximum": 12
   },
   "authors": [
     {
-      "name": "The League of Extraordinary FVTT Developers",
-      "url": "https://github.com/League-of-Foundry-Developers",
-      "discord": "discordID#0001"
+      "name": "ReAcTiOnN",
+      "url": "https://github.com/ReAcTiOnN77",
+      "discord": "reactionn"
     }
   ],
   "relationships": {
-    "systems": [],
+    "systems": [
+      {
+        "id": "dnd5e",
+        "type": "system",
+        "compatibility": {}
+      }
+    ],
     "requires": []
   },
   "esmodules": [
-    "scripts/module.js"
-  ],
-  "scripts": [
-    "scripts/lib/lib.js"
-  ],
-  "styles": [
-    "styles/module.css"
+    "scripts/main.js"
   ],
   "languages": [
     {
