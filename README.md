@@ -1,5 +1,5 @@
 # Combat Exhaustion
-This module is a simple one that adds exhaustion to a player depending on the setting to apply exhaustion.
+This module is a simple one, for D&D5e, that adds exhaustion to a player depending on the setting to apply exhaustion.
 The three options are:
 - Apply During Combat
 - Apply After Combat (Default)
