@@ -5,6 +5,7 @@ The three options are:
 - Apply After Combat (Default)
 - Always
 
+## Exhaustion Modes
 ### Apply During Combat
 Whenever a player gains HP from the unconsious state, during combat, 1 level of exhaustion is applied instantly. (Downs do not count outside of combat)
 
@@ -13,6 +14,9 @@ Whenever a player gains HP from the unconsious state, during combat, 1 level of 
 
 ### Always
 Whenever a player gains HP from the unconsious state, regardless of being in combat or not, they will receive 1 level of exhaustion
+
+## Exhaustion on Death Fail
+If this option is selected instead of a level of exhaustion being added on a down. The exhaustion is instead added when the player fails their first death save. This option runs in conjunction with the exhaustion mode that is chosen. (eg. After combat will count amount of first death fails in current combat then add at the end)
 
 ## License
 
