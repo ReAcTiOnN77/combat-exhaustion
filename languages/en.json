@@ -9,6 +9,10 @@
 					"duringCombat": "Apply During Combat",
 					"always": "Always Apply"
 				}
+			},
+			"exhaustOnFirstDeathFail": {
+				"name": "Exhaustion on First Death Save Failure",
+				"hint": "Add a level of exhaustion on the first death save failure, instead of down state. Applies based on exhaustion mode."
 			}
 		}
 	}

@@ -15,4 +15,14 @@ export function registerSettings() {
 		default: "afterCombat",
 		restricted: true
 	});
+
+	game.settings.register(MODULE_ID, "exhaustOnFirstDeathFail", {
+		name: game.i18n.localize(`${MODULE_ID}.settings.exhaustOnFirstDeathFail.name`),
+		hint: game.i18n.localize(`${MODULE_ID}.settings.exhaustOnFirstDeathFail.hint`),
+		scope: "world",
+		config: true,
+		type: Boolean,
+		default: false,
+		restricted: true
+	});
 }

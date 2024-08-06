@@ -19,19 +19,42 @@ Hooks.on("updateActor", async (actor, updateData) => {
   const hpValue = getProperty(updateData, "system.attributes.hp.value");
   const prevHpValue = actor.getFlag(MODULE_ID, "previousHp") ?? getProperty(actor, "system.attributes.hp.value");
   const exhaustionMode = game.settings.get(MODULE_ID, "exhaustionMode");
+  const exhaustOnFirstDeathFail = game.settings.get(MODULE_ID, "exhaustOnFirstDeathFail");
   const inCombat = isActorInCombat(actor);
 
   logDebug(`Actor updated: ${actor.name}, HP: ${hpValue}, Previous HP: ${prevHpValue}, Mode: ${exhaustionMode}, In Combat: ${inCombat}`);
 
-  // Track hitting 0 HP and restore from 0 HP
+  // Track restore from 0 HP if exhaustOnFirstDeathFail is disabled
   if (hpValue > 0 && prevHpValue === 0) {
-    if (exhaustionMode === "afterCombat" && inCombat) {
-      const currentTracker = actor.getFlag(MODULE_ID, "exhaustionTracker") || 0;
-      const newTrackerValue = currentTracker + 1;
-      logDebug(`Updating exhaustionTracker for ${actor.name} from ${currentTracker} to ${newTrackerValue}`);
-      await actor.setFlag(MODULE_ID, "exhaustionTracker", newTrackerValue);
-    } else if ((exhaustionMode === "duringCombat" && inCombat) || exhaustionMode === "always") {
-      await updateExhaustion(actor, 1);
+    if (!exhaustOnFirstDeathFail) {
+      if (exhaustionMode === "afterCombat" && inCombat) {
+        const currentTracker = actor.getFlag(MODULE_ID, "exhaustionTracker") || 0;
+        const newTrackerValue = currentTracker + 1;
+        logDebug(`Updating exhaustionTracker for ${actor.name} from ${currentTracker} to ${newTrackerValue}`);
+        await actor.setFlag(MODULE_ID, "exhaustionTracker", newTrackerValue);
+      } else if ((exhaustionMode === "duringCombat" && inCombat) || exhaustionMode === "always") {
+        await updateExhaustion(actor, 1);
+      }
+    }
+    // Reset the firstDeathFail flag when the actor is healed from 0 HP
+    await actor.unsetFlag(MODULE_ID, "firstDeathFail");
+  }
+
+  // Track first death save failure
+  if (exhaustOnFirstDeathFail && updateData.system?.attributes?.death?.failure > 0) {
+    const firstDeathFailFlag = actor.getFlag(MODULE_ID, "firstDeathFail");
+    if (!firstDeathFailFlag) {
+      logDebug(`${actor.name} has failed a death save for the first time.`);
+      await actor.setFlag(MODULE_ID, "firstDeathFail", true);
+
+      if (exhaustionMode === "afterCombat") {
+        const currentTracker = actor.getFlag(MODULE_ID, "exhaustionTracker") || 0;
+        const newTrackerValue = currentTracker + 1;
+        logDebug(`Updating exhaustionTracker for ${actor.name} from ${currentTracker} to ${newTrackerValue} due to first death fail.`);
+        await actor.setFlag(MODULE_ID, "exhaustionTracker", newTrackerValue);
+      } else if ((exhaustionMode === "duringCombat" && inCombat) || exhaustionMode === "always") {
+        await updateExhaustion(actor, 1);
+      }
     }
   }
 
