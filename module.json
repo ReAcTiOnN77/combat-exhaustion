@@ -40,8 +40,10 @@
   "url": "#{URL}#",
   "manifest": "#{MANIFEST}#",
   "download": "#{DOWNLOAD}#",
-  "license": "LICENSE",
-  "readme": "README.md",
+  "readme": "https://github.com/ReAcTiOnN77/combat-exhaustion/blob/master/README.md",
+	"changelog": "https://github.com/ReAcTiOnN77/combat-exhaustion/blob/master/CHANGELOG.md",
+	"license": "https://github.com/ReAcTiOnN77/combat-exhaustion/blob/master/LICENSE",
+	"bugs": "https://github.com/ReAcTiOnN77/combat-exhaustion/issues",
   "media": [
     {
       "type": "icon",
