@@ -1,19 +1,31 @@
 {
-	"combat-exhaustion": {
-		"settings": {
-			"exhaustionMode": {
-				"name": "Exhaustion Mode",
-				"hint": "Select how exhaustion is applied: after combat, during combat, or always.",
-				"choices": {
-					"afterCombat": "Apply After Combat",
-					"duringCombat": "Apply During Combat",
-					"always": "Always Apply"
-				}
-			},
-			"exhaustOnFirstDeathFail": {
-				"name": "Exhaustion on First Death Save Failure",
-				"hint": "Add a level of exhaustion on the first death save failure, instead of down state. Applies based on exhaustion mode."
-			}
-		}
-	}
+  "combat-exhaustion": {
+    "settings": {
+      "exhaustionMode": {
+        "name": "Exhaustion Mode",
+        "hint": "Select how exhaustion is applied: after combat, during combat, or always.",
+        "choices": {
+          "afterCombat": "Apply After Combat",
+          "duringCombat": "Apply During Combat",
+          "always": "Always Apply"
+        }
+      },
+      "exhaustOnFirstDeathFail": {
+        "name": "Exhaustion on First Death Save Failure",
+        "hint": "Add a level of exhaustion on the first death save failure. Applies based on exhaustion mode."
+      },
+      "enableConSave": {
+        "name": "Enable CON Save",
+        "hint": "Enable a Constitution saving throw before adding exhaustion."
+      },
+      "baseSaveDC": {
+        "name": "Base Save DC",
+        "hint": "Define the base save DC for the Constitution saving throw."
+      },
+      "singleCheckAfterCombat": {
+        "name": "Single Check After Combat",
+        "hint": "Enable a single check after combat that adds the amount of downs to the base DC as the save."
+      }
+    }
+  }
 }
