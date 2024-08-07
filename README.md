@@ -18,10 +18,14 @@ Whenever a player gains HP from the unconsious state, regardless of being in com
 ## Exhaustion on Death Fail
 If this option is selected instead of a level of exhaustion being added on a down. The exhaustion is instead added when the player fails their first death save. This option runs in conjunction with the exhaustion mode that is chosen. (eg. After combat will count amount of first death fails in current combat then add at the end)
 
-## License
+## DC for Exhaustion
+When this setting is enabled whenever you would gain a level of exhaustion, a Constitution (CON) Save is intiated. This CON Save DC is et by the DM in the settings. If failed will add 1 level of exhaustion.
 
+### Single Check After Combat
+When this setting is enabled instead of asking for a CON Save per down during combat, stacks the tracker and adds it to the base value to a save at the end of cmbat. (Only adds one level of exhaustion at end of combat on a fail)
+
+## License
 Combat Exhaustion is released under the [MIT License](./LICENSE).
 
 ## Contact
-
 For issues, please raise a bug in Github giving as much detail as you can. I will try and fix things as quickly as possible [https://github.com/ReAcTiOnN77/combat-exhaustion/issues](https://github.com/ReAcTiOnN77/combat-exhaustion/issues)
