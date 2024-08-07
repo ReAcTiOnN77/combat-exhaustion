@@ -1,3 +1,7 @@
+## Version 1.2.0
+Added an option to enable a CON Save for exhaustion on a pass no exhaustion is added. On a fail 1 level is added.
+Added option instead of exhaustion being added at end of cmabt for the amount of failed CON Saves, option allows for the tracking of downs then adds this to the base DC for CON Save. (Only adds one level of exhaustion, if enabled)
+
 ## Version 1.1.0
 Added new option that adds exhaustion on first failed death save instead of downed state. Adds depending on Exhaustion Mode.
 
