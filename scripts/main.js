@@ -14,8 +14,11 @@ Hooks.on("ready", () => {
 Hooks.on("updateActor", async (actor, updateData) => {
 	if (!actor.hasPlayerOwner && !game.user.isGM) return;
 	
-	const hpValue = foundry.utils.getProperty(updateData, "system.attributes.hp.value");
+	let hpValue = foundry.utils.getProperty(updateData, "system.attributes.hp.value");
 	const prevHpValue = actor.getFlag(MODULE_ID, "previousHp") ?? foundry.utils.getProperty(actor, "system.attributes.hp.value");
+	if (typeof hpValue === 'undefined')
+		hpValue = prevHpValue;
+	
 	const exhaustionMode = game.settings.get(MODULE_ID, "exhaustionMode");
 	const exhaustOnFirstDeathFail = game.settings.get(MODULE_ID, "exhaustOnFirstDeathFail");
 	const enableConSave = game.settings.get(MODULE_ID, "enableConSave");
