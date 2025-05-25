@@ -40,10 +40,10 @@
   "url": "#{URL}#",
   "manifest": "#{MANIFEST}#",
   "download": "#{DOWNLOAD}#",
-  "readme": "https://github.com/ReAcTiOnN77/combat-exhaustion/blob/master/README.md",
-  "changelog": "https://github.com/ReAcTiOnN77/combat-exhaustion/blob/master/CHANGELOG.md",
-  "license": "https://github.com/ReAcTiOnN77/combat-exhaustion/blob/master/LICENSE",
-  "bugs": "https://github.com/ReAcTiOnN77/combat-exhaustion/issues",
+  "readme": "https://github.com/Trentone/combat-exhaustion/blob/master/README.md",
+  "changelog": "https://github.com/Trentone/combat-exhaustion/blob/master/CHANGELOG.md",
+  "license": "https://github.com/Trentone/combat-exhaustion/blob/master/LICENSE",
+  "bugs": "https://github.com/Trentone/combat-exhaustion/issues",
   "media": [
     {
       "type": "icon",
