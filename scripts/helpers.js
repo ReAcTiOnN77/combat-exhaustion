@@ -7,7 +7,7 @@ export function isActorInCombat(actor) {
 
 // Helper function to update actor's exhaustion
 export async function updateExhaustion(actor, amount) {
-  let exhaustion = getProperty(actor, "system.attributes.exhaustion");
+  let exhaustion = foundry.utils.getProperty(actor, "system.attributes.exhaustion");
   logDebug(`Current exhaustion value: ${exhaustion} (type: ${typeof exhaustion})`);
 
   exhaustion = parseInt(exhaustion ?? 0, 10);
