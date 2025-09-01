@@ -1,3 +1,8 @@
+## Version 1.3.0
+- Fixed Actor Loop Error
+- Updated for Foundry VTT v13.348
+- Updated for D&D 5e v5.1.4
+
 ## Version 1.2.1
 - Fixed an error that caused exhaustion not to be added due to addExhaustion not being declared within certain setting combos
   
