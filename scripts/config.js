@@ -11,9 +11,9 @@ export function registerSettings() {
         config: true,
         type: String,
         choices: {
-          "afterCombat": game.i18n.localize(`${MODULE_ID}.settings.exhaustionMode.choices.afterCombat`),
-          "duringCombat": game.i18n.localize(`${MODULE_ID}.settings.exhaustionMode.choices.duringCombat`),
-          "always": game.i18n.localize(`${MODULE_ID}.settings.exhaustionMode.choices.always`)
+          afterCombat: game.i18n.localize(`${MODULE_ID}.settings.exhaustionMode.choices.afterCombat`),
+          duringCombat: game.i18n.localize(`${MODULE_ID}.settings.exhaustionMode.choices.duringCombat`),
+          always: game.i18n.localize(`${MODULE_ID}.settings.exhaustionMode.choices.always`)
         },
         default: "afterCombat",
         restricted: true
@@ -50,8 +50,8 @@ export function registerSettings() {
         hint: game.i18n.localize(`${MODULE_ID}.settings.baseSaveDC.hint`),
         scope: "world",
         config: true,
-        type: String,
-        default: "10",
+        type: Number,        // <— numeric, not string
+        default: 10,
         restricted: true
       }
     },
@@ -69,5 +69,5 @@ export function registerSettings() {
     }
   ];
 
-  settings.forEach(setting => game.settings.register(MODULE_ID, setting.key, setting.options));
+  settings.forEach((setting) => game.settings.register(MODULE_ID, setting.key, setting.options));
 }
