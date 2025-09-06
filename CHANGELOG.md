@@ -1,3 +1,7 @@
+## Version 1.3.1
+- Fixed missed exhaustion trigger when reviving from 0 HP on the first update event  
+  (added on-ready seeding and preUpdateActor snapshot for accurate previous HP tracking)
+
 ## Version 1.3.0
 - Fixed Actor Loop Error
 - Updated for Foundry VTT v13.348
