@@ -9,8 +9,41 @@ Hooks.once("init", registerSettings);
 // Re-entrancy guard: ignore the updates we ourselves cause
 const INTERNAL_UPDATE_GUARD = new Set();
 
-Hooks.on("ready", () => {
+/** Snapshot of HP *before* updates apply (per-actor) */
+const LAST_HP = new Map();
+
+/** Capture old HP before Foundry writes the new value */
+Hooks.on("preUpdateActor", (actor, updateData, options, userId) => {
+  const oldHp = foundry.utils.getProperty(actor, "system.attributes.hp.value");
+  if (typeof oldHp === "number") LAST_HP.set(actor.id, oldHp);
+});
+
+Hooks.on("ready", async () => {
   console.log("Combat Exhaustion module loaded.");
+
+  // ---- On-ready seeding: initialize previousHp for owned actors if missing ----
+  try {
+    const actors = (game.actors ?? []).filter(a => a?.isOwner || game.user.isGM);
+    for (const a of actors) {
+      // Only seed if flag is absent/nullish
+      if (a.getFlag(MODULE_ID, "previousHp") == null) {
+        const cur = foundry.utils.getProperty(a, "system.attributes.hp.value");
+        if (typeof cur === "number") {
+          INTERNAL_UPDATE_GUARD.add(a.id);
+          try {
+            await a.setFlag(MODULE_ID, "previousHp", cur);
+            logDebug?.(`Seeded previousHp for ${a.name} = ${cur}`);
+          } finally {
+            INTERNAL_UPDATE_GUARD.delete(a.id);
+          }
+        }
+      }
+      // Clean any stale snapshot from a prior session
+      LAST_HP.delete(a.id);
+    }
+  } catch (err) {
+    console.error(`Combat Exhaustion | Seeding previousHp failed:`, err);
+  }
 });
 
 Hooks.on("updateActor", async (actor, updateData, options, userId) => {
@@ -32,15 +65,20 @@ Hooks.on("updateActor", async (actor, updateData, options, userId) => {
   const singleCheckAfterCombat = game.settings.get(MODULE_ID, "singleCheckAfterCombat");
   const inCombat = isActorInCombat(actor);
 
-  // Read current values (prefer the update payload, fall back to doc)
-  const hpValue = foundry.utils.getProperty(updateData, "system.attributes.hp.value") ??
-                  foundry.utils.getProperty(actor, "system.attributes.hp.value");
-  const prevHpValue = actor.getFlag(MODULE_ID, "previousHp") ??
-                      foundry.utils.getProperty(actor, "system.attributes.hp.value");
+  // New (post-update) value
+  const hpValue =
+    foundry.utils.getProperty(updateData, "system.attributes.hp.value") ??
+    foundry.utils.getProperty(actor, "system.attributes.hp.value");
+
+  // Previous value priority: persistent flag → preUpdate snapshot → (new) doc value
+  const prevHpValue =
+    actor.getFlag(MODULE_ID, "previousHp") ??
+    LAST_HP.get(actor.id) ??
+    foundry.utils.getProperty(actor, "system.attributes.hp.value");
 
   logDebug(
     `updateActor for ${actor.name}: hp=${hpValue} prev=${prevHpValue} ` +
-    `mode=${exhaustionMode} inCombat=${inCombat} hpChanged=${hpChanged} deathFailChanged=${deathFailChanged}`
+    `mode=${exhaustionMode} inCombat=${inCombat} hpChanged=${!!hpChanged} deathFailChanged=${!!deathFailChanged}`
   );
 
   let increaseTracker = false;
