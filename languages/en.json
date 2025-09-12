@@ -25,7 +25,19 @@
       "singleCheckAfterCombat": {
         "name": "Single Check After Combat",
         "hint": "Enable a single check after combat that adds the amount of downs to the base DC as the save."
+      },
+      "exhaustionOverrideSwap": {
+        "name": "Override Exhaustion [Experimental]",
+        "hint": "When enabled, the module forces exhaustion mechanics to the opposite ruleset of the active core. On 2014 applies 2024 ; 2024 applies 2014"
       }
+    },
+    "ui": {
+      "exhaustion2014": "Exhaustion (2014)",
+      "exhaustion2024": "Exhausted (2024)"
     }
   }
 }
+
+    
+  
+

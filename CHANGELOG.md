@@ -1,3 +1,12 @@
+## Version 1.4.0
+- Added a new **experimental Exhaustion Override setting** (`exhaustionOverrideSwap`).
+  - When enabled, the module forces exhaustion mechanics to the *opposite* of the active dnd5e core ruleset:
+    - On **2014 (legacy)** cores → applies **2024** exhaustion rules (–2 to all d20 tests per level, –5 ft speed per level).
+    - On **2024 (modern)** cores → emulates the **2014** exhaustion table (disadvantage, halved speed, etc).
+- **Default behavior remains unchanged.**  
+  - If the setting is left **off**, the module continues to function exactly as in v1.3.1.
+- Marked as **experimental**: this feature is still under active testing and may interact unexpectedly with other modules or future dnd5e system updates.
+
 ## Version 1.3.1
 - Fixed missed exhaustion trigger when reviving from 0 HP on the first update event  
   (added on-ready seeding and preUpdateActor snapshot for accurate previous HP tracking)

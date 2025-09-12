@@ -50,7 +50,7 @@ export function registerSettings() {
         hint: game.i18n.localize(`${MODULE_ID}.settings.baseSaveDC.hint`),
         scope: "world",
         config: true,
-        type: Number,        // <— numeric, not string
+        type: Number,
         default: 10,
         restricted: true
       }
@@ -66,7 +66,31 @@ export function registerSettings() {
         default: false,
         restricted: true
       }
-    }
+    },
+    {
+      key: "exhaustionOverrideSwap",
+      options: {
+		name: game.i18n.localize(`${MODULE_ID}.settings.exhaustionOverrideSwap.name`),
+		hint: game.i18n.localize(`${MODULE_ID}.settings.exhaustionOverrideSwap.hint`),
+        scope: "world",
+        config: true,
+        type: Boolean,
+        default: false,
+        restricted: true,
+        onChange: () => {
+		  foundry.utils.debouncedReload();
+		}
+      }
+    },
+	{
+	  key: "lastNotifiedVersion",
+	  options: {
+		scope: "world",
+		config: false,
+		type: String,
+		default: ""
+	  }
+	}
   ];
 
   settings.forEach((setting) => game.settings.register(MODULE_ID, setting.key, setting.options));

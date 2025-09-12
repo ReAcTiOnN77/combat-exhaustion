@@ -3,8 +3,13 @@ export const DEBUG_MODE = false; // flip to true for verbose logs
 
 import { isActorInCombat, updateExhaustion, promptConSave, logDebug } from "./helpers.js";
 import { registerSettings } from "./config.js";
+import { initExhaustionOverride } from "./exhaustionOverride.js"; // ⬅ NEW
 
-Hooks.once("init", registerSettings);
+// Register settings and let the override file attach its own hooks
+Hooks.once("init", () => {
+  registerSettings();
+  initExhaustionOverride();
+});
 
 // Re-entrancy guard: ignore the updates we ourselves cause
 const INTERNAL_UPDATE_GUARD = new Set();
@@ -18,14 +23,40 @@ Hooks.on("preUpdateActor", (actor, updateData, options, userId) => {
   if (typeof oldHp === "number") LAST_HP.set(actor.id, oldHp);
 });
 
-Hooks.on("ready", async () => {
+Hooks.once("ready", async () => {
   console.log("Combat Exhaustion module loaded.");
+
+  // Resolve version at 'ready' time (safest)
+  const MODULE_VERSION = game.modules.get(MODULE_ID)?.version;
+
+  // One-time upgrade note (per version)
+  try {
+    const lastVersion = game.settings.get(MODULE_ID, "lastNotifiedVersion") ?? "";
+    if (game.user.isGM && MODULE_VERSION && MODULE_VERSION !== lastVersion) {
+      await ChatMessage.create({
+        speaker: { alias: "Combat Exhaustion" },
+        content: `
+          <h2>Combat Exhaustion Updated</h2>
+          <p>You have updated to <strong>v${MODULE_VERSION}</strong>.</p>
+          <p>This release adds an <em>experimental Exhaustion Override</em> setting:</p>
+          <ul>
+            <li>On 5e rules version <strong>2014 (legacy)</strong> → applies <strong>2024 rules</strong>.</li>
+            <li>On 5e rules version <strong>2024 (modern)</strong> → emulates the <strong>2014 table</strong>.</li>
+          </ul>
+          <p>By default the module behavior is unchanged. You can enable the override in
+          <strong>Module Settings → Combat Exhaustion</strong>.</p>
+        `
+      });
+      await game.settings.set(MODULE_ID, "lastNotifiedVersion", MODULE_VERSION);
+    }
+  } catch (err) {
+    console.error(`${MODULE_ID} | upgrade notice failed:`, err);
+  }
 
   // ---- On-ready seeding: initialize previousHp for owned actors if missing ----
   try {
     const actors = (game.actors ?? []).filter(a => a?.isOwner || game.user.isGM);
     for (const a of actors) {
-      // Only seed if flag is absent/nullish
       if (a.getFlag(MODULE_ID, "previousHp") == null) {
         const cur = foundry.utils.getProperty(a, "system.attributes.hp.value");
         if (typeof cur === "number") {
@@ -38,7 +69,6 @@ Hooks.on("ready", async () => {
           }
         }
       }
-      // Clean any stale snapshot from a prior session
       LAST_HP.delete(a.id);
     }
   } catch (err) {
