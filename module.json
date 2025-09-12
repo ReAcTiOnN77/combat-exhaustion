@@ -25,7 +25,13 @@
         "compatibility": {}
       }
     ],
-    "requires": []
+    "requires": [
+      {
+        "id": "lib-wrapper",
+        "type": "module",
+        "compatibility": {}
+      }
+    ]
   },
   "esmodules": [
     "scripts/main.js"
