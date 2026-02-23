@@ -1,3 +1,8 @@
+## Version 1.4.1
+- Fixed minor bugs in the exhaustion override
+- Fixed bug with override not playing nice with MidiQoL competing with prepareData
+- Fixed bug were updateActor fired on every connected client
+  
 ## Version 1.4.0
 - Added a new **experimental Exhaustion Override setting** (`exhaustionOverrideSwap`).
   - When enabled, the module forces exhaustion mechanics to the *opposite* of the active dnd5e core ruleset:
