@@ -1,155 +1,195 @@
 // /scripts/exhaustionOverride.js
 // Force 2014↔2024 Exhaustion rules without killing the UI or creating new statuses.
+//
+// Based on dnd5e.mjs source analysis:
+//  - rulesVersion is strictly "modern" | "legacy" (no "2024"/"2014"/"v2024" variants)
+//  - addRollExhaustion(parts, data): parts is string[], data is roll data object
+//    - Called once per {parts,data} pair; for adv/dis multiple pairs are created
+//    - Guard via WeakSet on `data` objects (same object reused per pair)
+//  - Movement: system reads conditionEffects.halfMovement / noMovement + reduction.speed
+//    - force2014: zero reduction.speed shim; legacy table driven by hasConditionEffect synthesis
+//    - force2024: minimal prepareDerivedData wrapper applies -5ft × level
+//  - hasConditionEffect: checks statuses Set AND (if legacy) synthesizes from exhaustion-N keys
+//  - OVERRIDE_UPDATE_GUARD exported so main.js can check it to avoid re-entrant triggers
 
-const MODULE_ID = "combat-exhaustion";
+import { MODULE_ID } from "./main.js";
 
-/* ---------------- Settings & version helpers ---------------- */
-const swapOn       = () => game.settings.get(MODULE_ID, "exhaustionOverrideSwap") === true;
-const rulesVersion = () => String(game.settings.get("dnd5e", "rulesVersion") ?? "").toLowerCase();
-const coreIsModern = () => ["modern", "2024", "v2024"].includes(rulesVersion());
-const coreIsLegacy = () => ["legacy", "2014", "v2014", ""].includes(rulesVersion());
+/* ─────────────────────────── Settings helpers ───────────────────────────────── */
 
-const force2024 = () => swapOn() && coreIsLegacy(); // core=2014 → behave like 2024
-const force2014 = () => swapOn() && coreIsModern(); // core=2024 → behave like 2014
-const exLevel    = (a) => Number(foundry.utils.getProperty(a, "system.attributes.exhaustion") ?? 0) || 0;
+const swapOn = () => game.settings.get(MODULE_ID, "exhaustionOverrideSwap") === true;
 
-/* Legacy “condition effects” driven by Exhaustion levels */
-const LEGACY_EXH_KEYS = new Set([
-  "abilityCheckDisadvantage", // L1
-  "halfMovement",             // L2
-  "attackDisadvantage",       // L3
-  "abilitySaveDisadvantage",  // L3
-  "halfHealth",               // L4
-  "noMovement"                // L5
-]);
+// dnd5e only ever stores "modern" or "legacy"
+const coreIsLegacy = () => game.settings.get("dnd5e", "rulesVersion") === "legacy";
+const coreIsModern = () => game.settings.get("dnd5e", "rulesVersion") === "modern";
 
-/* ---------------- libWrapper helper ---------------- */
+/** core=legacy → behave like 2024 */
+const force2024 = () => swapOn() && coreIsLegacy();
+/** core=modern → behave like 2014 */
+const force2014 = () => swapOn() && coreIsModern();
+
+const exLevel = (actor) =>
+  Number(foundry.utils.getProperty(actor, "system.attributes.exhaustion") ?? 0) || 0;
+
+/* ─────────────────────────── Shared update guard ────────────────────────────── */
+// Exported so main.js can check our updates and skip them in updateActor.
+
+export const OVERRIDE_UPDATE_GUARD = new Set();
+
+async function safeActorUpdate(actor, data, options = {}) {
+  OVERRIDE_UPDATE_GUARD.add(actor.id);
+  try {
+    await actor.update(data, options);
+  } finally {
+    OVERRIDE_UPDATE_GUARD.delete(actor.id);
+  }
+}
+
+/* ─────────────────────────── libWrapper helper ──────────────────────────────── */
+
 function registerWrap(target, fn, type = "WRAPPER") {
   const useLib = !!game.modules.get("lib-wrapper")?.active && window.libWrapper;
   if (useLib) return libWrapper.register(MODULE_ID, target, fn, type);
 
-  // Fallback: direct patch
   const [objPath, method] = target.split(".prototype.");
   const obj = objPath.split(".").reduce((o, k) => o?.[k], window);
   if (!obj?.prototype) return;
-  const key = `_cex_${method}_wrapped`;
-  if (obj.prototype[key]) return;
-  obj.prototype[key] = true;
+  const sentinel = `_cex_${method}_patched`;
+  if (obj.prototype[sentinel]) return;
+  obj.prototype[sentinel] = true;
   const original = obj.prototype[method];
-  obj.prototype[method] = function (...args) { return fn.call(this, original.bind(this), ...args); };
+  obj.prototype[method] = function (...args) {
+    return fn.call(this, original.bind(this), ...args);
+  };
 }
 
-const actorClass = () => CONFIG.Actor?.documentClass;
-const hasAddExhaustion = () => typeof actorClass()?.prototype?.addRollExhaustion === "function";
+/* ─────────────────────────── Modern reduction shim ─────────────────────────── */
+// Zeroes out CONFIG.DND5E.conditionTypes.exhaustion.reduction so the system's
+// prepareMovement doesn't apply the modern flat speed/roll penalty when we're in
+// force2014 mode. The legacy table handles penalties via hasConditionEffect instead.
 
-/* ---------------- Modern (2024) reduction shim ----------------
-   When forcing 2014 on a modern core, zero-out modern reductions so
-   only legacy table (via hasConditionEffect) applies. */
-let ORIG_REDUCTION = null;
+let _origReduction = null;
+
 function applyModernReductionShim() {
-  const ct = (CONFIG.DND5E?.conditionTypes ?? {}).exhaustion;
-  if (!(force2014() && coreIsModern() && ct)) return;
-  if (!ORIG_REDUCTION) {
-    const r = ct.reduction ?? { rolls: 2, speed: 5 };
-    ORIG_REDUCTION = { rolls: r.rolls ?? 2, speed: r.speed ?? 5 };
-  }
+  const ct = CONFIG.DND5E?.conditionTypes?.exhaustion;
+  if (!ct || _origReduction) return;
+  const r = ct.reduction ?? { rolls: 2, speed: 5 };
+  _origReduction = { rolls: r.rolls ?? 2, speed: r.speed ?? 5 };
   ct.reduction = { rolls: 0, speed: 0 };
 }
-function restoreModernReductionShimIfNeeded() {
-  const ct = (CONFIG.DND5E?.conditionTypes ?? {}).exhaustion;
-  if (!ct || !ORIG_REDUCTION) return;
-  ct.reduction = { ...ORIG_REDUCTION };
-  ORIG_REDUCTION = null;
+
+function restoreModernReductionShim() {
+  const ct = CONFIG.DND5E?.conditionTypes?.exhaustion;
+  if (!ct || !_origReduction) return;
+  ct.reduction = { ..._origReduction };
+  _origReduction = null;
 }
 
-
-/* ---------- Exhaustion UI tooltip/label swap (2014 ↔ 2024) ---------- */
-let _CEX_ORIG_REF  = null;
-let _CEX_ORIG_NAME = null;
+/* ─────────────────────────── Exhaustion UI text ─────────────────────────────── */
 
 const REF_2024 =
   "Compendium.dnd5e.content24.JournalEntry.phbAppendixCRule.JournalEntryPage.jSQtPgNm0i4f3Qi3";
-const REF_2014 =
-  (window.REFERENCES?.conditionTypes?.exhaustion)
-  || "Compendium.dnd5e.rules.JournalEntry.w7eitkpD7QQTB6j0.JournalEntryPage.cspWveykstnu3Zcv";
+// Lazy — window.REFERENCES is set by dnd5e during init, not at parse time
+const REF_2014 = () =>
+  window.REFERENCES?.conditionTypes?.exhaustion ??
+  "Compendium.dnd5e.rules.JournalEntry.w7eitkpD7QQTB6j0.JournalEntryPage.cspWveykstnu3Zcv";
 
+let _origRef  = null;
+let _origName = null;
 
-function _applyExhaustionUIText() {
+function applyExhaustionUIText() {
   const ct = CONFIG?.DND5E?.conditionTypes?.exhaustion;
   if (!ct) return;
 
-  // Cache originals once so we can restore when override is off
-  if (_CEX_ORIG_REF  === null) _CEX_ORIG_REF  = ct.reference ?? null;
-  if (_CEX_ORIG_NAME === null) _CEX_ORIG_NAME = ct.name ?? "DND5E.ConExhaustion";
+  if (_origRef  === null) _origRef  = ct.reference ?? null;
+  if (_origName === null) _origName = ct.name ?? "DND5E.ConExhaustion";
 
-  if (swapOn() && force2024() && coreIsLegacy()) {
-    // legacy core → show 2024 text
-    ct.name = game.i18n.localize(`${MODULE_ID}.ui.exhaustion2024`);
+  if (force2024()) {
+    ct.name      = game.i18n.localize(`${MODULE_ID}.ui.exhaustion2024`);
     ct.reference = REF_2024;
-    if ("description" in ct) delete ct.description; // ensure VAE uses reference, not HTML
-  } else if (swapOn() && force2014() && coreIsModern()) {
-    // modern core → show 2014 text
-    ct.name = game.i18n.localize(`${MODULE_ID}.ui.exhaustion2014`);
-    ct.reference = REF_2014;
-    if ("description" in ct) delete ct.description;
+    delete ct.description;
+  } else if (force2014()) {
+    ct.name      = game.i18n.localize(`${MODULE_ID}.ui.exhaustion2014`);
+    ct.reference = REF_2014();
+    delete ct.description;
   } else {
-    // No override → restore system defaults
-    ct.name = _CEX_ORIG_NAME ?? "DND5E.ConExhaustion";
-    if (_CEX_ORIG_REF) ct.reference = _CEX_ORIG_REF; else delete ct.reference;
-    if ("description" in ct) delete ct.description;
+    ct.name = _origName ?? "DND5E.ConExhaustion";
+    if (_origRef) ct.reference = _origRef;
+    else delete ct.reference;
+    delete ct.description;
   }
 
-  // Nudge any internal caches so popovers refresh
-  try {
-    if (game.dnd5e?.effects?.rebuild) game.dnd5e.effects.rebuild();
-    if (game.dnd5e?.rules?.rebuildConditionEffects) game.dnd5e.rules.rebuildConditionEffects();
-  } catch (_) {}
+  try { game.dnd5e?.effects?.rebuild?.(); } catch (_) {}
+  try { game.dnd5e?.rules?.rebuildConditionEffects?.(); } catch (_) {}
 }
 
+/* ─────────────────────────── Roll guard: WeakSet on data objects ────────────── */
+// addRollExhaustion(parts, data) is called once per {parts,data} pair.
+// rollConfig.rolls.forEach(({parts,data}) => this.addRollExhaustion(parts,data))
+// Each pair has its own distinct `data` object, so keying the guard on `data`
+// ensures exactly one injection per pair with no cross-contamination.
 
+const _rollDataApplied = new WeakSet();
 
+/* ─────────────────────────── prepareDerivedData guard ───────────────────────── */
+// WeakMap prevents double-application when dnd5e calls prepareData() multiple
+// times synchronously. Cleared in a finally block — no setTimeout needed.
 
-/* ---------------- Core logic ---------------- */
+const _prepInProgress = new WeakMap();
+
+/* ─────────────────────────── Core init ─────────────────────────────────────── */
+
 export function initExhaustionOverride() {
   Hooks.once("setup", () => {
 
-    // Ensure the shim matches the chosen direction at startup
-    if (force2014() && coreIsModern()) applyModernReductionShim();
-    else restoreModernReductionShimIfNeeded();
+    if (force2014()) applyModernReductionShim();
+    else restoreModernReductionShim();
+    applyExhaustionUIText();
 
-    // Apply UI text for the popover now (and again on ready)
-    _applyExhaustionUIText();
+    /* ── 1. hasConditionEffect (MIXED) ─────────────────────────────────────────
+       dnd5e source (line ~33181):
+         const applyExhaustion = (level !== null) && !imms.has("exhaustion")
+           && (rulesVersion === "legacy");
+         return props.some(k => {
+           const l = Number(k.split("-").pop());
+           return (statuses.has(k) && !imms.has(k)) || (applyExhaustion && isInteger(l) && level >= l);
+         });
 
-    // 1) hasConditionEffect — BOTH directions (MIXED)
+       force2024 (core=legacy): mask the level-synthesis; return only explicit statuses
+       force2014 (core=modern): synthesize as if applyExhaustion=true despite modern mode
+    ────────────────────────────────────────────────────────────────────────── */
     registerWrap(
       "CONFIG.Actor.documentClass.prototype.hasConditionEffect",
       function (wrapped, key) {
-        if (!LEGACY_EXH_KEYS.has(key)) return wrapped(key);
+        const props = CONFIG.DND5E?.conditionEffects?.[key];
+        if (!props) return wrapped(key);
+
+        // Only intercept keys that have any exhaustion-level-driven entries
+        const hasLevelProps = [...props].some(k => Number.isInteger(Number(k.split("-").pop())));
+        if (!hasLevelProps) return wrapped(key);
+
+        // Short-circuit when swap is off — no need to compute anything
+        if (!swapOn()) return wrapped(key);
 
         const statuses = this.statuses ?? new Set();
-        const props    = CONFIG.DND5E?.conditionEffects?.[key] ?? new Set();
-        const immVal   = this.system?.traits?.ci?.value ?? [];
-        const imms     = immVal instanceof Set ? immVal : new Set(immVal);
+        const immRaw   = this.system?.traits?.ci?.value ?? new Set();
+        const imms     = immRaw instanceof Set ? immRaw : new Set(immRaw);
         const level    = this.system?.attributes?.exhaustion ?? null;
 
-        const hasExplicit = (() => {
-          for (const id of props) if (statuses.has(id) && !imms.has(id)) return true;
-          return false;
-        })();
+        // Explicit: a relevant status ID is present and not immune
+        const hasExplicit = [...props].some(k => statuses.has(k) && !imms.has(k));
 
-        // legacy core → 2024: mask legacy synthesis, honor only explicit statuses
-        if (force2024() && coreIsLegacy()) return hasExplicit;
+        if (force2024()) {
+          // Legacy core synthesizes level-driven effects; suppress that, keep only explicit
+          return hasExplicit;
+        }
 
-        // modern core → 2014: synthesize legacy table like legacy did
-        if (force2014() && coreIsModern()) {
+        if (force2014()) {
+          // Modern core doesn't synthesize; do it ourselves (legacy table logic)
           if (imms.has("exhaustion")) return hasExplicit;
-          let synthesized = false;
-          if (level !== null) {
-            for (const id of props) {
-              const l = Number(String(id).split("-").pop());
-              if (Number.isInteger(l) && level >= l) { synthesized = true; break; }
-            }
-          }
+          const synthesized = level !== null && [...props].some(k => {
+            const l = Number(k.split("-").pop());
+            return Number.isInteger(l) && level >= l;
+          });
           return hasExplicit || synthesized;
         }
 
@@ -158,166 +198,228 @@ export function initExhaustionOverride() {
       "MIXED"
     );
 
-    // 2) Apply or cancel d20 test penalties (WRAPPER semantics)
+    /* ── 2. addRollExhaustion (WRAPPER) ────────────────────────────────────────
+       Actual signature: addRollExhaustion(parts: string[], data: object)
+       Core calls this when rulesVersion === "modern"; injects "@exhaustion" into
+       parts and sets data.exhaustion = -(level * reduction.rolls).
+
+       force2014: core just ran and added @exhaustion; strip it (and zero reduction
+         shim means the amount would be 0 anyway, but strip for safety)
+       force2024: core did nothing (legacy skips this method); inject -2*lvl ourselves
+    ────────────────────────────────────────────────────────────────────────── */
     registerWrap(
       "CONFIG.Actor.documentClass.prototype.addRollExhaustion",
       function (wrapped, parts, data = {}) {
-        // Let core mutate first so we can adjust cleanly.
         const ret = wrapped(parts, data);
         if (!swapOn()) return ret;
 
         const lvl = exLevel(this);
         if (!lvl) return ret;
-
-        // per-roll guard to prevent duplicate 2024 injection
-        data.flags ??= {};
-        data.flags[MODULE_ID] ??= {};
-        if (data.flags[MODULE_ID].applied2024 === true) return ret;
+        if (_rollDataApplied.has(data)) return ret;
+        _rollDataApplied.add(data);
 
         const stripCore = () => {
           if (Array.isArray(parts)) {
-            for (let i = parts.length - 1; i >= 0; i--) if (parts[i] === "@exhaustion") parts.splice(i, 1);
+            for (let i = parts.length - 1; i >= 0; i--) {
+              if (parts[i] === "@exhaustion") parts.splice(i, 1);
+            }
           }
           if (typeof data.exhaustion === "number") data.exhaustion = 0;
         };
 
         if (force2014()) {
-          // Core (modern) added −2×lvl; cancel it so legacy table can stand alone.
+          // Core (modern) added @exhaustion with reduction.rolls * lvl;
+          // cancel it since the shim zeros reduction.rolls anyway, and to be safe
           stripCore();
           return ret;
         }
 
         if (force2024()) {
-          // Core (legacy) added nothing; inject −2×lvl exactly once.
+          // Core (legacy) did nothing; inject -2×lvl flat penalty
           stripCore();
-          const amt = 2 * lvl;
-          if (Array.isArray(parts)) parts.push(-amt);
-          data.exhaustion = -amt;
-          data.flags[MODULE_ID].applied2024 = true;
+          if (Array.isArray(parts)) parts.push("@exhaustion");
+          data.exhaustion = -(2 * lvl);
         }
+
         return ret;
       },
       "WRAPPER"
     );
 
-    // Fallback ONLY if system lacks addRollExhaustion (avoid double-injection)
-    if (!hasAddExhaustion()) {
+    // Fallback only if the system lacks addRollExhaustion entirely (very old builds)
+    if (typeof CONFIG.Actor?.documentClass?.prototype?.addRollExhaustion !== "function") {
       Hooks.on("dnd5e.preRoll", (actor, rollConfig = {}) => {
-        if (!(swapOn() && force2024() && coreIsLegacy())) return;
+        if (!force2024()) return;
         const lvl = exLevel(actor);
         if (lvl <= 0) return;
-        rollConfig.flags ??= {}; rollConfig.flags[MODULE_ID] ??= {};
-        if (rollConfig.flags[MODULE_ID].applied2024 === true) return;
+        if (_rollDataApplied.has(rollConfig)) return;
+        _rollDataApplied.add(rollConfig);
         const parts = rollConfig.parts ?? (rollConfig.parts = []);
-        const amt = -(2 * lvl);
-        if (!parts.some(p => p === amt)) parts.push(amt);
-        rollConfig.flags[MODULE_ID].applied2024 = true;
-        rollConfig.flavor = [rollConfig.flavor, `Exhausted (2024): ${amt}`].filter(Boolean).join(" • ");
+        parts.push(-(2 * lvl));
+        rollConfig.flavor = [rollConfig.flavor, `Exhausted (2024): ${-(2 * lvl)}`]
+          .filter(Boolean).join(" • ");
         if (typeof rollConfig.disadvantage === "boolean") rollConfig.disadvantage = false;
       });
     }
 
-    // 3) Movement adjust (WRAPPER) with single-pass guard
+    /* ── 3. prepareDerivedData (WRAPPER) — force2024 speed penalty only ────────
+       The system's prepareMovement reads conditionEffects.halfMovement for ×0.5
+       and reduction.speed for the modern flat penalty.
+
+       force2014: reduction shim zeroes reduction.speed; hasConditionEffect
+         synthesizes halfMovement/noMovement. Nothing else needed here.
+
+       force2024: 2024 rules apply -5ft × level flat, which is NOT the same as
+         the conditionEffects halving system and isn't in the legacy code path.
+         We apply it directly after prepareMovement has run.
+    ────────────────────────────────────────────────────────────────────────── */
     registerWrap(
       "CONFIG.Actor.documentClass.prototype.prepareDerivedData",
       function (wrapped, ...args) {
-        const out = wrapped(...args);
-        if (!swapOn()) return out;
+        if (_prepInProgress.get(this)) return wrapped(...args);
+        _prepInProgress.set(this, true);
+        try {
+          const out = wrapped(...args);
 
-        const lvl = exLevel(this);
-        if (!lvl) return out;
+          if (!force2024()) return out;
 
-        const mv = this.system?.attributes?.movement;
-        if (!mv) return out;
+          const lvl = exLevel(this);
+          if (!lvl) return out;
 
-        // one-pass guard to avoid double math in the same prepare cycle
-        this.flags ??= {};
-        this.flags[MODULE_ID] ??= {};
-        if (this.flags[MODULE_ID]._movedThisPrepare) return out;
-        this.flags[MODULE_ID]._movedThisPrepare = true;
+          const mv = this.system?.attributes?.movement;
+          if (!mv) return out;
 
-        const keys = ["walk", "fly", "swim", "climb", "burrow"];
-
-        if (force2024() && coreIsLegacy()) {
-          // legacy core → apply −5 ft × level
-          for (const k of keys) {
+          const reduction = 5 * lvl;
+          for (const k of Object.keys(CONFIG.DND5E?.movementTypes ?? {})) {
             const cur = Number(mv[k] ?? 0);
-            if (Number.isFinite(cur)) mv[k] = Math.max(0, cur - 5 * lvl);
+            if (Number.isFinite(cur) && cur > 0) mv[k] = Math.max(0, cur - reduction);
           }
-        } else if (force2014() && coreIsModern()) {
-          // modern core reductions are disabled by the shim; don't touch speeds here.
-          // Halving/zeroing comes from hasConditionEffect synthesis (legacy table).
-        }
 
-        // release guard after this task queue tick
-        setTimeout(() => { try { if (this?.flags?.[MODULE_ID]) this.flags[MODULE_ID]._movedThisPrepare = false; } catch {} }, 0);
-        return out;
+          return out;
+        } finally {
+          _prepInProgress.delete(this);
+        }
       },
       "WRAPPER"
     );
   });
 
-  // ⬇️ Post-load normalization so actors immediately use the forced model after reload
+  /* ── ready: post-load normalization ─────────────────────────────────────────── */
   Hooks.once("ready", async () => {
     console.log(
-      `[${MODULE_ID}] ready | rulesVersion=${rulesVersion()} | swapOn=${swapOn()} | force2024=${force2024()} | force2014=${force2014()} | hasAddExh=${hasAddExhaustion()}`
+      `[${MODULE_ID}] exhaustionOverride ready | ` +
+      `rulesVersion=${game.settings.get("dnd5e", "rulesVersion")} | ` +
+      `swapOn=${swapOn()} | force2024=${force2024()} | force2014=${force2014()}`
     );
 
-    // Re-apply the popover text after everything’s live and refresh VAE panel
-    _applyExhaustionUIText();
+    applyExhaustionUIText();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    // Only the GM runs normalization — prevents permission errors on player clients
+    // and avoids duplicate updates when multiple players own the same actor.
+    if (!game.user.isGM) return;
 
     try {
-      /* ---------- LEGACY CORE → 2024 (your existing working path) ---------- */
-      if (swapOn() && force2024() && coreIsLegacy()) {
-        // 1) Strip any saved legacy Exhaustion AE payload (changes[])
+      /* ── Legacy core → 2024 ──────────────────────────────────────────────── */
+      if (force2024()) {
+        // Strip any legacy AE change payloads so they don't re-apply on next load
         for (const a of game.actors ?? []) {
           for (const eff of a.effects ?? []) {
             const e = eff?.toObject?.() ?? eff;
             const isExh =
-              e?.flags?.core?.statusId === "exhaustion" ||
-              e?.flags?.dnd5e?.conditionId === "exhaustion" ||
+              e?.flags?.core?.statusId       === "exhaustion" ||
+              e?.flags?.dnd5e?.conditionId   === "exhaustion" ||
               e?.flags?.dnd5e?.conditionType === "exhaustion" ||
               String(e?.name ?? "").toLowerCase().includes("exhaust");
             if (!isExh) continue;
             if (Array.isArray(eff.changes) && eff.changes.length) {
-              try { await eff.update({ changes: [] }); } catch {}
+              OVERRIDE_UPDATE_GUARD.add(a.id);
+              try { await eff.update({ changes: [] }); }
+              catch (_) {}
+              finally { OVERRIDE_UPDATE_GUARD.delete(a.id); }
             }
           }
         }
         await sleep(10);
+
+        // Nudge actors so 2024 penalties apply immediately
         for (const a of game.actors ?? []) {
-          const lvl = exLevel(a);
-          if (!lvl) continue;
-          try { await a.update({ "system.attributes.exhaustion": lvl }, { diff: false }); } catch {}
+          if (!exLevel(a)) continue;
+          await safeActorUpdate(a, { "system.attributes.exhaustion": exLevel(a) }, { diff: false });
         }
-        for (const a of game.actors ?? []) { try { a.prepareData?.(); a.render?.(false); } catch {} }
+        // NOTE: do NOT call a.prepareData() manually here — midi-qol and DAE
+        // cannot handle a second prepare call mid-session (causes _index redefinition
+        // errors). The safeActorUpdate above already triggers a full reactive prepare.
+        for (const a of game.actors ?? []) {
+          try { a.render?.(false); } catch (_) {}
+        }
       }
 
-      /* ---------- MODERN CORE → 2014 (mirror path) ---------- */
-      if (swapOn() && force2014() && coreIsModern()) {
-        // Ensure modern reductions are disabled
+      /* ── Modern core → 2014 ──────────────────────────────────────────────── */
+      if (force2014()) {
         applyModernReductionShim();
-
-        // Nudge actors so 2014 synthesis applies immediately after reload
+        // Nudge actors so legacy synthesis kicks in immediately
         for (const a of game.actors ?? []) {
-          const lvl = exLevel(a);
-          if (!lvl) continue;
-          try {
-            await a.update({ "system.attributes.exhaustion": lvl }, { diff: false, render: false });
-          } catch {}
+          if (!exLevel(a)) continue;
+          await safeActorUpdate(
+            a,
+            { "system.attributes.exhaustion": exLevel(a) },
+            { diff: false, render: false }
+          );
         }
-        // Do NOT call a.prepareData()/render here — avoids double-halving/zeroing.
+        // No prepareData/render — avoids double halving/zeroing
       }
     } catch (err) {
       console.error(`${MODULE_ID} | post-load normalization failed`, err);
     }
   });
 
-  // Optional: if you fire this when toggling the setting, the UI text will update instantly.
+  // External callers (e.g. settings onChange) can trigger a UI text refresh
   Hooks.on("cexhaustion-reapply", () => {
-    try { _applyExhaustionUIText(); } catch (e) { console.error(`[${MODULE_ID}] tooltip swap failed (reapply)`, e); }
+    try { applyExhaustionUIText(); }
+    catch (e) { console.error(`[${MODULE_ID}] tooltip swap failed (reapply)`, e); }
+  });
 
+  /* ── Visual Active Effects compatibility (optional) ──────────────────────────
+     Only applied if VAE is installed and active. VAE reads `effect.description`
+     synchronously before its hook fires, and uses Hooks.call() (not await), so
+     async hooks are useless here. Instead we shadow `description` with a
+     prototype getter on the ActiveEffect class so VAE sees the correct @Embed
+     reference string at read time. Falls through to stored value when VAE is
+     absent, swap is off, or the effect isn't exhaustion.
+  ────────────────────────────────────────────────────────────────────────────── */
+  Hooks.once("setup", () => {
+    if (!game.modules.get("visual-active-effects")?.active) return;
+
+    const AEClass = CONFIG.ActiveEffect?.documentClass;
+    if (!AEClass || AEClass.prototype._cex_descriptionPatched) return;
+    AEClass.prototype._cex_descriptionPatched = true;
+
+    Object.defineProperty(AEClass.prototype, "description", {
+      configurable: true,
+      enumerable: true,
+      get() {
+        // Read stored value from whichever internal store Foundry uses
+        const stored = this._source?.description ?? this._data?.description ?? "";
+
+        if (!swapOn()) return stored;
+
+        const isExhaustion =
+          this.flags?.dnd5e?.conditionId   === "exhaustion" ||
+          this.flags?.dnd5e?.conditionType === "exhaustion" ||
+          this.flags?.core?.statusId       === "exhaustion" ||
+          String(this.name ?? "").toLowerCase().includes("exhaust");
+
+        if (!isExhaustion) return stored;
+
+        const ref = force2024() ? REF_2024 : force2014() ? REF_2014() : null;
+        return ref ? `@Embed[${ref} inline]` : stored;
+      },
+      set(value) {
+        // Let Foundry's document system write through to _source as normal
+        if (this._source) this._source.description = value;
+        else if (this._data) this._data.description = value;
+      },
+    });
   });
 }

@@ -3,7 +3,7 @@ export const DEBUG_MODE = false; // flip to true for verbose logs
 
 import { isActorInCombat, updateExhaustion, promptConSave, logDebug } from "./helpers.js";
 import { registerSettings } from "./config.js";
-import { initExhaustionOverride } from "./exhaustionOverride.js"; // ⬅ NEW
+import { initExhaustionOverride, OVERRIDE_UPDATE_GUARD } from "./exhaustionOverride.js";
 
 // Register settings and let the override file attach its own hooks
 Hooks.once("init", () => {
@@ -11,8 +11,14 @@ Hooks.once("init", () => {
   initExhaustionOverride();
 });
 
-// Re-entrancy guard: ignore the updates we ourselves cause
+// Re-entrancy guard: ignore the updates we ourselves cause.
+// Also merged with OVERRIDE_UPDATE_GUARD so exhaustionOverride.js actor.update()
+// calls are invisible to this hook (fixes issue #4).
 const INTERNAL_UPDATE_GUARD = new Set();
+
+function isGuarded(actorId) {
+  return INTERNAL_UPDATE_GUARD.has(actorId) || OVERRIDE_UPDATE_GUARD.has(actorId);
+}
 
 /** Snapshot of HP *before* updates apply (per-actor) */
 const LAST_HP = new Map();
@@ -26,7 +32,6 @@ Hooks.on("preUpdateActor", (actor, updateData, options, userId) => {
 Hooks.once("ready", async () => {
   console.log("Combat Exhaustion module loaded.");
 
-  // Resolve version at 'ready' time (safest)
   const MODULE_VERSION = game.modules.get(MODULE_ID)?.version;
 
   // One-time upgrade note (per version)
@@ -77,8 +82,8 @@ Hooks.once("ready", async () => {
 });
 
 Hooks.on("updateActor", async (actor, updateData, options, userId) => {
-  // Ignore our own internal updates
-  if (INTERNAL_UPDATE_GUARD.has(actor.id)) return;
+  // Ignore our own internal updates AND exhaustionOverride.js updates
+  if (isGuarded(actor.id)) return;
 
   // v13-safe ownership check
   if (!actor.isOwner && !game.user.isGM) return;
@@ -88,12 +93,12 @@ Hooks.on("updateActor", async (actor, updateData, options, userId) => {
   const deathFailChanged = foundry.utils.hasProperty(updateData, "system.attributes.death.failure");
   if (!hpChanged && !deathFailChanged) return;
 
-  const exhaustionMode = game.settings.get(MODULE_ID, "exhaustionMode");
+  const exhaustionMode          = game.settings.get(MODULE_ID, "exhaustionMode");
   const exhaustOnFirstDeathFail = game.settings.get(MODULE_ID, "exhaustOnFirstDeathFail");
-  const enableConSave = game.settings.get(MODULE_ID, "enableConSave");
-  const baseSaveDC = Number(game.settings.get(MODULE_ID, "baseSaveDC"));
-  const singleCheckAfterCombat = game.settings.get(MODULE_ID, "singleCheckAfterCombat");
-  const inCombat = isActorInCombat(actor);
+  const enableConSave           = game.settings.get(MODULE_ID, "enableConSave");
+  const baseSaveDC              = Number(game.settings.get(MODULE_ID, "baseSaveDC"));
+  const singleCheckAfterCombat  = game.settings.get(MODULE_ID, "singleCheckAfterCombat");
+  const inCombat                = isActorInCombat(actor);
 
   // New (post-update) value
   const hpValue =
@@ -113,8 +118,10 @@ Hooks.on("updateActor", async (actor, updateData, options, userId) => {
 
   let increaseTracker = false;
 
-  // ----- HP RISE FROM 0 → >0 (the “back up” moment) -----
-  if (hpChanged && hpValue > 0 && prevHpValue === 0) {
+  // ----- HP RISE FROM 0 → >0 (the "back up" moment) -----
+  // Gate writes on isGM to prevent duplicate exhaustion when multiple clients
+  // own the same actor and both receive the updateActor hook simultaneously.
+  if (hpChanged && hpValue > 0 && prevHpValue === 0 && game.user.isGM) {
     try {
       INTERNAL_UPDATE_GUARD.add(actor.id);
 
@@ -151,7 +158,7 @@ Hooks.on("updateActor", async (actor, updateData, options, userId) => {
   }
 
   // ----- FIRST DEATH SAVE FAILURE PATH -----
-  if (deathFailChanged && exhaustOnFirstDeathFail) {
+  if (deathFailChanged && exhaustOnFirstDeathFail && game.user.isGM) {
     const deathFails =
       foundry.utils.getProperty(updateData, "system.attributes.death.failure") ??
       foundry.utils.getProperty(actor, "system.attributes.death.failure");
@@ -189,7 +196,7 @@ Hooks.on("updateActor", async (actor, updateData, options, userId) => {
   }
 
   // ----- Persist previousHp only if changed -----
-  if (hpChanged && hpValue !== prevHpValue) {
+  if (hpChanged && hpValue !== prevHpValue && game.user.isGM) {
     try {
       INTERNAL_UPDATE_GUARD.add(actor.id);
       await actor.setFlag(MODULE_ID, "previousHp", hpValue);
@@ -201,10 +208,10 @@ Hooks.on("updateActor", async (actor, updateData, options, userId) => {
 
 // Add exhaustion at the end of combat
 Hooks.on("deleteCombat", async (combat) => {
-  const exhaustionMode = game.settings.get(MODULE_ID, "exhaustionMode");
-  const enableConSave = game.settings.get(MODULE_ID, "enableConSave");
-  const baseSaveDC = Number(game.settings.get(MODULE_ID, "baseSaveDC"));
-  const singleCheckAfterCombat = game.settings.get(MODULE_ID, "singleCheckAfterCombat");
+  const exhaustionMode          = game.settings.get(MODULE_ID, "exhaustionMode");
+  const enableConSave           = game.settings.get(MODULE_ID, "enableConSave");
+  const baseSaveDC              = Number(game.settings.get(MODULE_ID, "baseSaveDC"));
+  const singleCheckAfterCombat  = game.settings.get(MODULE_ID, "singleCheckAfterCombat");
 
   for (let combatant of combat.combatants) {
     const actor = combatant.actor;
@@ -229,9 +236,8 @@ Hooks.on("deleteCombat", async (combat) => {
         }
       }
 
-      // Reset trackers (no-op if already zero)
+      // Reset trackers
       await actor.setFlag(MODULE_ID, "exhaustionTracker", 0);
-      // Do not force previousHp to 0 here; let it reflect last known HP transition
     } finally {
       INTERNAL_UPDATE_GUARD.delete(actor.id);
     }
