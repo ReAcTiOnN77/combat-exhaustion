@@ -40,6 +40,7 @@ Hooks.once("ready", async () => {
     if (game.user.isGM && MODULE_VERSION && MODULE_VERSION !== lastVersion) {
       await ChatMessage.create({
         speaker: { alias: "Combat Exhaustion" },
+        whisper: ChatMessage.getWhisperRecipients("GM"), // GM eyes only
         content: `
           <h2>Combat Exhaustion Updated</h2>
           <p>You have updated to <strong>v${MODULE_VERSION}</strong>.</p>
@@ -97,7 +98,7 @@ Hooks.on("updateActor", async (actor, updateData, options, userId) => {
   const exhaustOnFirstDeathFail = game.settings.get(MODULE_ID, "exhaustOnFirstDeathFail");
   const enableConSave           = game.settings.get(MODULE_ID, "enableConSave");
   const baseSaveDC              = Number(game.settings.get(MODULE_ID, "baseSaveDC"));
-  const singleCheckAfterCombat  = game.settings.get(MODULE_ID, "singleCheckAfterCombat");
+  const afterCombatCheckMode    = game.settings.get(MODULE_ID, "afterCombatCheckMode");
   const inCombat                = isActorInCombat(actor);
 
   // New (post-update) value
@@ -132,7 +133,7 @@ Hooks.on("updateActor", async (actor, updateData, options, userId) => {
         increaseTracker = true;
         if (
           enableConSave &&
-          !singleCheckAfterCombat &&
+          afterCombatCheckMode === "disabled" &&
           ((exhaustionMode === "duringCombat" && inCombat) ||
             exhaustionMode === "always" ||
             (exhaustionMode === "afterCombat" && inCombat))
@@ -208,38 +209,69 @@ Hooks.on("updateActor", async (actor, updateData, options, userId) => {
 
 // Add exhaustion at the end of combat
 Hooks.on("deleteCombat", async (combat) => {
-  const exhaustionMode          = game.settings.get(MODULE_ID, "exhaustionMode");
-  const enableConSave           = game.settings.get(MODULE_ID, "enableConSave");
-  const baseSaveDC              = Number(game.settings.get(MODULE_ID, "baseSaveDC"));
-  const singleCheckAfterCombat  = game.settings.get(MODULE_ID, "singleCheckAfterCombat");
+  const exhaustionMode       = game.settings.get(MODULE_ID, "exhaustionMode");
+  const baseSaveDC           = Number(game.settings.get(MODULE_ID, "baseSaveDC"));
+  const afterCombatCheckMode = game.settings.get(MODULE_ID, "afterCombatCheckMode");
 
-  for (let combatant of combat.combatants) {
+  // Only GM runs end-of-combat exhaustion to prevent duplicate writes
+  if (!game.user.isGM) return;
+
+  for (const combatant of combat.combatants) {
     const actor = combatant.actor;
-    if (!actor || (!actor.isOwner && !game.user.isGM)) continue;
+    if (!actor) continue;
 
+    if (exhaustionMode !== "afterCombat") continue;
+
+    const exhaustionTracker = actor.getFlag(MODULE_ID, "exhaustionTracker") || 0;
+
+    // Always reset the tracker regardless of outcome
     try {
       INTERNAL_UPDATE_GUARD.add(actor.id);
-
-      if (exhaustionMode === "afterCombat") {
-        const exhaustionTracker = actor.getFlag(MODULE_ID, "exhaustionTracker") || 0;
-        if (exhaustionTracker > 0) {
-          let addExhaustion = true;
-          if (enableConSave && singleCheckAfterCombat) {
-            const dc = baseSaveDC + exhaustionTracker;
-            const success = await promptConSave(actor, dc);
-            addExhaustion = !success;
-          }
-          if (addExhaustion) {
-            logDebug(`Applying ${exhaustionTracker} exhaustion to ${actor.name} after combat.`);
-            await updateExhaustion(actor, exhaustionTracker);
-          }
-        }
-      }
-
-      // Reset trackers
       await actor.setFlag(MODULE_ID, "exhaustionTracker", 0);
     } finally {
       INTERNAL_UPDATE_GUARD.delete(actor.id);
+    }
+
+    if (exhaustionTracker <= 0) continue;
+
+    const dc = baseSaveDC + exhaustionTracker;
+    logDebug(`End of combat for ${actor.name}: tracker=${exhaustionTracker} dc=${dc} mode=${afterCombatCheckMode}`);
+
+    // "disabled": no save, apply all stacked levels directly
+    if (afterCombatCheckMode === "disabled") {
+      logDebug(`Applying ${exhaustionTracker} exhaustion to ${actor.name} (no check).`);
+      try {
+        INTERNAL_UPDATE_GUARD.add(actor.id);
+        await updateExhaustion(actor, exhaustionTracker);
+      } finally {
+        INTERNAL_UPDATE_GUARD.delete(actor.id);
+      }
+
+    // "singleExhaustion": Con save at DC (base + downs); fail = 1 level
+    } else if (afterCombatCheckMode === "singleExhaustion") {
+      const success = await promptConSave(actor, dc);  // guard NOT held during dialog
+      if (!success) {
+        logDebug(`Single exhaustion check failed for ${actor.name}, applying 1 level.`);
+        try {
+          INTERNAL_UPDATE_GUARD.add(actor.id);
+          await updateExhaustion(actor, 1);
+        } finally {
+          INTERNAL_UPDATE_GUARD.delete(actor.id);
+        }
+      }
+
+    // "stackedExhaustion": Con save at DC (base + downs); fail = all N levels
+    } else if (afterCombatCheckMode === "stackedExhaustion") {
+      const success = await promptConSave(actor, dc);  // guard NOT held during dialog
+      if (!success) {
+        logDebug(`Stacked exhaustion check failed for ${actor.name}, applying ${exhaustionTracker} levels.`);
+        try {
+          INTERNAL_UPDATE_GUARD.add(actor.id);
+          await updateExhaustion(actor, exhaustionTracker);
+        } finally {
+          INTERNAL_UPDATE_GUARD.delete(actor.id);
+        }
+      }
     }
   }
 });

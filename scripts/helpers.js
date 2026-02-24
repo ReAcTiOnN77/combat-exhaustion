@@ -2,13 +2,12 @@ import { DEBUG_MODE } from "./main.js";
 
 // Is the actor actively in a started combat?
 export function isActorInCombat(actor) {
-  return game.combats.some((combat) => {
-    const started = combat?.started ?? (combat.round > 0);
-    return started && combat.combatants.some((c) => c.actorId === actor.id);
-  });
+  return game.combats.some(
+    (combat) => combat.started && combat.combatants.some((c) => c.actorId === actor.id)
+  );
 }
 
-// Update actor's exhaustion safely for dnd5e 5.x (default 0–6)
+// Update actor's exhaustion safely for dnd5e 5.x
 export async function updateExhaustion(actor, amount) {
   let exhaustion = foundry.utils.getProperty(actor, "system.attributes.exhaustion");
   logDebug(`Current exhaustion value: ${exhaustion} (type: ${typeof exhaustion})`);
@@ -16,9 +15,8 @@ export async function updateExhaustion(actor, amount) {
   exhaustion = parseInt(exhaustion ?? 0, 10);
   logDebug(`Parsed exhaustion value: ${exhaustion} (type: ${typeof exhaustion})`);
 
-  // Try to read a system-provided max; fallback to 6 (2014 rules)
-  const configuredMax =
-    foundry.utils.getProperty(CONFIG, "DND5E.exhaustion.max") ?? 6;
+  // dnd5e 5.x stores the max in conditionTypes.exhaustion.levels
+  const configuredMax = CONFIG.DND5E.conditionTypes?.exhaustion?.levels ?? 6;
 
   const next = Math.clamp(exhaustion + amount, 0, configuredMax);
   logDebug(`Updating exhaustion for ${actor.name} to ${next} (max ${configuredMax})`);
@@ -35,35 +33,38 @@ export async function updateExhaustion(actor, amount) {
   }
 }
 
-// Prompt a Constitution save and post a modern v13 chat message
+// Prompt a Constitution saving throw using dnd5e's native pipeline.
+// Passing options.target = dc causes dnd5e to render the green/red pass/fail
+// styling on the chat card automatically. DSN fires normally. No custom card needed.
 export async function promptConSave(actor, dc) {
-  // Use roll data directly to avoid dnd5e's internal mergeObject path
-  const data = actor.getRollData ? actor.getRollData() : actor.system ?? {};
-  // In 5.x, the save bonus lives at abilities.con.save.value
-  const bonus =
-    foundry.utils.getProperty(data, "abilities.con.save.value") ??
-    foundry.utils.getProperty(actor, "system.abilities.con.save.value") ??
-    0;
+  const rolls = await actor.rollSavingThrow(
+    {
+      ability: "con",
+      rolls: [{ options: { target: Number(dc) } }]  // drives pass/fail colouring
+    },
+    {
+      options: {
+        window: {
+          subtitle: `DC ${dc}`  // shown under the "Constitution Saving Throw" title
+        }
+      }
+    },
+    {
+      data: {
+        flavor: `Constitution Saving Throw (DC ${dc})`  // shown on the chat card
+      }
+    }
+  );
 
-  const roll = await (new Roll(`1d20 + ${bonus}`)).evaluate({ async: true });
-  const success = (roll.total ?? 0) >= Number(dc ?? 10);
-  const rollHTML = await roll.render();
+  if (!rolls?.length) {
+    logDebug(`Con save cancelled or returned nothing for ${actor.name}`);
+    return false;
+  }
 
-  const messageContent = `
-    <i>Constitution Save</i> (DC ${dc}).<br>
-    <b>${success ? "Passed the Roll" : "Failed Roll.<br>Gains a level of Exhaustion"}</b>
-    ${rollHTML}
-  `;
-
-  await ChatMessage.create({
-    speaker: ChatMessage.getSpeaker({ actor }),
-    content: messageContent
-  });
-
+  const success = rolls[0].total >= Number(dc ?? 10);
+  logDebug(`Con save for ${actor.name}: rolled ${rolls[0].total} vs DC ${dc} → ${success ? "pass" : "fail"}`);
   return success;
 }
-
-
 
 // Debug logger
 export function logDebug(message) {

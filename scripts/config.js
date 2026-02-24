@@ -56,14 +56,19 @@ export function registerSettings() {
       }
     },
     {
-      key: "singleCheckAfterCombat",
+      key: "afterCombatCheckMode",
       options: {
-        name: game.i18n.localize(`${MODULE_ID}.settings.singleCheckAfterCombat.name`),
-        hint: game.i18n.localize(`${MODULE_ID}.settings.singleCheckAfterCombat.hint`),
+        name: game.i18n.localize(`${MODULE_ID}.settings.afterCombatCheckMode.name`),
+        hint: game.i18n.localize(`${MODULE_ID}.settings.afterCombatCheckMode.hint`),
         scope: "world",
         config: true,
-        type: Boolean,
-        default: false,
+        type: String,
+        choices: {
+          disabled:          game.i18n.localize(`${MODULE_ID}.settings.afterCombatCheckMode.choices.disabled`),
+          singleExhaustion:  game.i18n.localize(`${MODULE_ID}.settings.afterCombatCheckMode.choices.singleExhaustion`),
+          stackedExhaustion: game.i18n.localize(`${MODULE_ID}.settings.afterCombatCheckMode.choices.stackedExhaustion`)
+        },
+        default: "disabled",
         restricted: true
       }
     },
