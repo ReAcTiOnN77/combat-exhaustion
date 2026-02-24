@@ -2,33 +2,38 @@
   "combat-exhaustion": {
     "settings": {
       "exhaustionMode": {
-        "name": "Exhaustion Mode",
-        "hint": "Select how exhaustion is applied: after combat, during combat, or always.",
+        "name": "When Is Exhaustion Applied?",
+        "hint": "Controls when exhaustion is applied. After combat will save all exhaustion until the end, all others will apply immediately",
         "choices": {
-          "afterCombat": "Apply After Combat",
-          "duringCombat": "Apply During Combat",
-          "always": "Always Apply"
+          "afterCombat": "After Combat (Queued)",
+          "duringCombat": "During Combat Only (Immediately)",
+          "always": "Always (Immediately)"
         }
       },
       "exhaustOnFirstDeathFail": {
-        "name": "Exhaustion on First Death Save Failure",
-        "hint": "Add a level of exhaustion on the first death save failure. Applies based on exhaustion mode."
+        "name": "Trigger on First Death Save Failure",
+        "hint": "Shifts the trigger from getting back up to failing the first death save."
       },
       "enableConSave": {
-        "name": "Enable CON Save",
-        "hint": "Enable a Constitution saving throw before adding exhaustion."
+        "name": "Require a CON Save to Avoid Exhaustion",
+        "hint": "Players roll a Constitution save when exhaustion would be applied. DC is set below."
       },
       "baseSaveDC": {
         "name": "Base Save DC",
-        "hint": "Define the base save DC for the Constitution saving throw."
+        "hint": "Base DC for the CON save. When using After Combat Check Mode, this increases by 1 for each time the character went down (e.g. 3 downs = DC 13 at base 10)."
       },
-      "singleCheckAfterCombat": {
-        "name": "Single Check After Combat",
-        "hint": "Enable a single check after combat that adds the amount of downs to the base DC as the save."
+      "afterCombatCheckMode": {
+        "name": "After Combat: Exhaustion Mode",
+        "hint": "When using 'After Combat'. Applies exhaustions either without a save (all stacked exhaustions), or with a save (increasing the DC by 1 for each down in combat) either single or stacked exhaustion",
+        "choices": {
+          "disabled": "No Save — All Exhaustions",
+          "singleExhaustion": "CON Save — Single Exhaustion",
+          "stackedExhaustion": "CON Save — Stacked Exhaustion"
+        }
       },
       "exhaustionOverrideSwap": {
-        "name": "Override Exhaustion [Experimental]",
-        "hint": "When enabled, the module forces exhaustion mechanics to the opposite ruleset of the active core. On 2014 applies 2024 ; 2024 applies 2014"
+        "name": "Swap Exhaustion Ruleset [Experimental]",
+        "hint": "Flips exhaustion to the opposite ruleset. 2014 rules → applies 2024 mechanics. 2024 rules → applies 2014 mechanics. Requires a reload."
       }
     },
     "ui": {
@@ -37,7 +42,3 @@
     }
   }
 }
-
-    
-  
-
