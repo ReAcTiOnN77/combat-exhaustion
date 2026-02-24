@@ -1,3 +1,14 @@
+## Version 1.5.0
+- **Breaking Change:** Replaced "Single Check After Combat" toggle with a new **After Combat: Exhaustion Mode** dropdown
+  - **No Save — All Exhaustions:** applies all stacked levels at end of combat without a save
+  - **CON Save — Single Exhaustion:** one save at scaled DC (base + number of downs), fail = 1 level
+  - **CON Save — Stacked Exhaustion:** one save at scaled DC (base + number of downs), fail = 1 level per down
+- CON Save now uses dnd5e's native save pipeline — proficiency, advantage/disadvantage, and midi-qol hooks all apply correctly
+- CON Save DC is now shown in the roll dialog and on the chat card
+- Fixed CON Save not triggering Dice So Nice animations
+- Fixed stacked exhaustion bug where all levels were applied regardless of which mode was selected
+- Fixed `deleteCombat` firing on all connected clients instead of GM only
+
 ## Version 1.4.1
 - Fixed minor bugs in the exhaustion override
 - Fixed bug with override not playing nice with MidiQoL competing with prepareData
