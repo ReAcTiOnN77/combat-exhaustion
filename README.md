@@ -1,52 +1,77 @@
 # Combat Exhaustion
-This module is a simple one, for D&D5e, that adds exhaustion to a player depending on the setting to apply exhaustion.
-The three options are:
-- Apply During Combat
-- Apply After Combat (Default)
-- Always
 
-## Exhaustion Modes
-### Apply During Combat
-Whenever a player gains HP from the unconscious state, during combat, 1 level of exhaustion is applied instantly. (Downs do not count outside of combat)
-
-### Apply After Combat
-Whenever a player gains HP from the unconscious state, during combat, 1 level of exhaustion is added to a tracker and all those levels in the tracker are applied at the end of combat. (Downs are not tracked outside of combat)
-
-### Always
-Whenever a player gains HP from the unconscious state, regardless of being in combat or not, they will receive 1 level of exhaustion.
-
-## Exhaustion on Death Fail
-If this option is selected, instead of a level of exhaustion being added when a character goes down, the exhaustion is instead added when the player fails their first death save.  
-This option runs in conjunction with the exhaustion mode that is chosen. (eg. After Combat will count the number of first death fails in current combat then add them at the end)
-
-## DC for Exhaustion
-When this setting is enabled, whenever you would gain a level of exhaustion, a Constitution (CON) Save is initiated. This CON Save DC is set by the DM in the settings.  
-On a failure, 1 level of exhaustion is applied.
-
-### Single Check After Combat
-When this setting is enabled, instead of asking for a CON Save per down during combat, the module stacks the tracker and adds it to the base DC for a single save at the end of combat.  
-(Only adds one level of exhaustion at end of combat on a failed save)
+A D&D 5e Foundry VTT module that automatically applies exhaustion when a character is downed in combat.
 
 ---
 
-## ⚠️ Experimental: Exhaustion Override
-A new **Exhaustion Override** setting (`exhaustionOverrideSwap`) has been introduced.  
-When enabled, the module forces exhaustion mechanics to the *opposite* of the active dnd5e core ruleset:
+## How It Works
 
-- On **2014 (legacy)** cores → applies **2024** exhaustion rules  
-  (–2 to all d20 tests per level, –5 ft speed per level).  
-- On **2024 (modern)** cores → emulates the **2014** exhaustion table  
-  (disadvantage, halved speed, HP max halved, speed 0, death).
+Each time a character is brought back up from 0 HP, the module triggers an exhaustion event. Depending on your settings, this may apply immediately or be held until the end of combat. A CON save can optionally be required before any exhaustion is applied.
 
-> **Default behavior remains unchanged.**  
-> If the setting is left **off**, the module continues to function exactly as in previous versions.  
-> This feature is marked **experimental** and may interact unexpectedly with other modules or future dnd5e system updates.
+---
+
+## Settings
+
+### When Is Exhaustion Applied?
+
+Controls the moment exhaustion is applied:
+
+- **After Combat (Queued)** *(default)* — Each time a character goes down, 1 level is added to a tracker. All tracked levels are applied when combat ends.
+- **During Combat Only (Immediately)** — Exhaustion is applied the moment a character gets back up. Only triggers during active combat.
+- **Always (Immediately)** — Exhaustion is applied immediately whenever a character goes down, even outside of combat.
+
+---
+
+### Trigger on First Death Save Failure
+
+When enabled, the exhaustion trigger shifts from the moment a character **gets back up** to the moment they **fail their first death saving throw**.
+
+Works alongside whichever exhaustion mode is selected — for example, in After Combat mode it tracks the number of first death save failures and applies them all at the end of combat.
+
+---
+
+### Require a CON Save to Avoid Exhaustion
+
+When enabled, a Constitution saving throw is prompted before exhaustion is applied. Pass the save and exhaustion is avoided entirely. The DC is set by **Base Save DC**.
+
+---
+
+### Base Save DC
+
+The base difficulty for the Constitution saving throw. When using **After Combat: Exhaustion Mode** with a save, this DC increases by 1 for each time the character went down during the fight.
+
+> **Example:** Base DC 10, character went down 3 times → DC 13.
+
+---
+
+### After Combat: Exhaustion Mode
+
+Only applies when **When Is Exhaustion Applied?** is set to *After Combat (Queued)*. Controls how much exhaustion is applied at the end of combat, and whether a save is required:
+
+- **No Save — All Exhaustions** — No roll required. Applies 1 level of exhaustion per down automatically.
+- **CON Save — Single Exhaustion** — One CON save at the scaled DC. Fail = 1 level of exhaustion, regardless of how many times the character went down.
+- **CON Save — Stacked Exhaustion** — One CON save at the scaled DC. Fail = 1 level of exhaustion per down.
+
+---
+
+## ⚠️ Experimental: Swap Exhaustion Ruleset
+
+When enabled, the module forces exhaustion mechanics to the **opposite** of your active dnd5e ruleset:
+
+| Active Ruleset | With Override Enabled |
+|---|---|
+| 2014 (legacy) | Applies **2024** rules: –2 to all d20 tests per level, –5 ft speed per level |
+| 2024 (modern) | Applies **2014** rules: disadvantage on checks, halved speed, halved HP max, speed 0, then death |
+
+Default behaviour is unchanged when this setting is off. This feature is marked experimental and may interact unexpectedly with other modules or future dnd5e updates.
 
 ---
 
 ## License
-Combat Exhaustion is released under the [MIT License](./LICENSE).
 
-## Contact
-For issues, please raise a bug in GitHub giving as much detail as you can. I will try to fix things as quickly as possible:  
+Released under the [MIT License](./LICENSE).
+
+## Issues & Support
+
+Found a bug? Please open an issue on GitHub with as much detail as possible:
 [https://github.com/ReAcTiOnN77/combat-exhaustion/issues](https://github.com/ReAcTiOnN77/combat-exhaustion/issues)
