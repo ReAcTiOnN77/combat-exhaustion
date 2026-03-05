@@ -11,9 +11,9 @@ export function registerSettings() {
         config: true,
         type: String,
         choices: {
-          afterCombat: game.i18n.localize(`${MODULE_ID}.settings.exhaustionMode.choices.afterCombat`),
+          afterCombat:  game.i18n.localize(`${MODULE_ID}.settings.exhaustionMode.choices.afterCombat`),
           duringCombat: game.i18n.localize(`${MODULE_ID}.settings.exhaustionMode.choices.duringCombat`),
-          always: game.i18n.localize(`${MODULE_ID}.settings.exhaustionMode.choices.always`)
+          always:       game.i18n.localize(`${MODULE_ID}.settings.exhaustionMode.choices.always`)
         },
         default: "afterCombat",
         restricted: true
@@ -32,14 +32,19 @@ export function registerSettings() {
       }
     },
     {
-      key: "enableConSave",
+      key: "saveMode",
       options: {
-        name: game.i18n.localize(`${MODULE_ID}.settings.enableConSave.name`),
-        hint: game.i18n.localize(`${MODULE_ID}.settings.enableConSave.hint`),
+        name: game.i18n.localize(`${MODULE_ID}.settings.saveMode.name`),
+        hint: game.i18n.localize(`${MODULE_ID}.settings.saveMode.hint`),
         scope: "world",
         config: true,
-        type: Boolean,
-        default: false,
+        type: String,
+        choices: {
+          disabled: game.i18n.localize(`${MODULE_ID}.settings.saveMode.choices.disabled`),
+          conSave:  game.i18n.localize(`${MODULE_ID}.settings.saveMode.choices.conSave`),
+          flatD20:  game.i18n.localize(`${MODULE_ID}.settings.saveMode.choices.flatD20`)
+        },
+        default: "disabled",
         restricted: true
       }
     },
@@ -73,30 +78,41 @@ export function registerSettings() {
       }
     },
     {
-      key: "exhaustionOverrideSwap",
+      key: "enableLongRestQuality",
       options: {
-		name: game.i18n.localize(`${MODULE_ID}.settings.exhaustionOverrideSwap.name`),
-		hint: game.i18n.localize(`${MODULE_ID}.settings.exhaustionOverrideSwap.hint`),
+        name: game.i18n.localize(`${MODULE_ID}.settings.enableLongRestQuality.name`),
+        hint: game.i18n.localize(`${MODULE_ID}.settings.enableLongRestQuality.hint`),
         scope: "world",
         config: true,
         type: Boolean,
         default: false,
         restricted: true,
-        onChange: () => {
-		  foundry.utils.debouncedReload();
-		}
+        onChange: () => foundry.utils.debouncedReload()
       }
     },
-	{
-	  key: "lastNotifiedVersion",
-	  options: {
-		scope: "world",
-		config: false,
-		type: String,
-		default: ""
-	  }
-	}
+    {
+      key: "exhaustionOverrideSwap",
+      options: {
+        name: game.i18n.localize(`${MODULE_ID}.settings.exhaustionOverrideSwap.name`),
+        hint: game.i18n.localize(`${MODULE_ID}.settings.exhaustionOverrideSwap.hint`),
+        scope: "world",
+        config: true,
+        type: Boolean,
+        default: false,
+        restricted: true,
+        onChange: () => foundry.utils.debouncedReload()
+      }
+    },
+    {
+      key: "lastNotifiedVersion",
+      options: {
+        scope: "world",
+        config: false,
+        type: String,
+        default: ""
+      }
+    }
   ];
 
-  settings.forEach((setting) => game.settings.register(MODULE_ID, setting.key, setting.options));
+  settings.forEach(s => game.settings.register(MODULE_ID, s.key, s.options));
 }
