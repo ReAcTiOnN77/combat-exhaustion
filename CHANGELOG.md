@@ -1,3 +1,20 @@
+## Version 1.6.0
+- **Breaking Change:** Replaced "Require a CON Save to Avoid Exhaustion" checkbox with a new **Require a Save to Avoid Exhaustion** dropdown
+  - **Disabled:** no save required, exhaustion is applied automatically
+  - **CON Save:** uses the character's Constitution modifier
+  - **Flat d20:** unmodified die roll with no ability modifiers
+- Setting **Base Save DC to 0** now disables all combat exhaustion triggers entirely while keeping Long Rest Quality and Ruleset Swap active
+- After Combat mode options now read "Save" instead of "CON Save" to reflect the configurable save type
+- Added new **Enable Long Rest Quality** setting (disabled by default, requires reload)
+  - When enabled, the GM is prompted to choose a rest quality tier at the start of each long rest
+    - **Standard Rest:** rough sleeping, camping, or a basic tavern — recover 1 exhaustion
+    - **Comfortable Rest:** a private room at a good inn or similarly comfortable lodging — recover 2 exhaustion
+    - **Luxury Rest:** a luxury suite at a fine inn, bathhouse, or exceptional care — recover 3 exhaustion
+  - Compatible with Rest Recovery's batch long rest flow
+  - Players who initiate a rest will wait for the GM to set quality; GM cancelling the rest cancels it for all players
+- Exhaustion gain and recovery chat notifications are now fully localisable
+- Swap Exhaustion Ruleset is no longer marked experimental
+
 ## Version 1.5.0
 - **Breaking Change:** Replaced "Single Check After Combat" toggle with a new **After Combat: Exhaustion Mode** dropdown
   - **No Save — All Exhaustions:** applies all stacked levels at end of combat without a save
