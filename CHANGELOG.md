@@ -1,3 +1,7 @@
+## Version 1.6.1
+- CON Save and Flat d20 now prompt the controlling player rather than the GM. If no player is online for that actor, the GM rolls as a fallback.
+- If Dice So Nice is active, exhaustion is now held until the dice animation completes before being applied.
+
 ## Version 1.6.0
 - **Breaking Change:** Replaced "Require a CON Save to Avoid Exhaustion" checkbox with a new **Require a Save to Avoid Exhaustion** dropdown
   - **Disabled:** no save required, exhaustion is applied automatically
