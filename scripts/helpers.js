@@ -1,3 +1,5 @@
+const SOCKET_EVENT = "module.combat-exhaustion";
+
 export function isActorInCombat(actor) {
   return game.combats.some(
     (combat) => combat.started && combat.combatants.some((c) => c.actorId === actor.id)
@@ -21,39 +23,136 @@ export async function updateExhaustion(actor, amount) {
   }
 }
 
+/* -------------------------------------------------- */
+/*  Save routing                                      */
+/* -------------------------------------------------- */
+
+const _pendingSaves = new Map(); // actorId → { resolve, timer }
+
+export function initSaveListener() {
+  game.socket.on(SOCKET_EVENT, async (data) => {
+
+    // Player receives request and runs the roll
+    if (data?.type === "saveRequest" && !game.user.isGM) {
+      const actor = game.actors.get(data.actorId);
+      if (!actor?.isOwner) return;
+
+      let passed   = false;
+      let messageId = null;
+
+      // Capture the chat message ID created by the roll
+      const captureId = Hooks.once("createChatMessage", msg => { messageId = msg.id; });
+
+      if (data.saveType === "conSave") {
+        const rolls = await actor.rollSavingThrow(
+          {
+            ability: "con",
+            rolls: [{ options: { target: data.dc } }]
+          },
+          { options: { window: { subtitle: `DC ${data.dc}` } } },
+          { data: { flavor: `Constitution Saving Throw (DC ${data.dc})` } }
+        );
+        if (rolls?.length) passed = rolls[0].total >= data.dc;
+      } else if (data.saveType === "flatD20") {
+        const rolls = await CONFIG.Dice.D20Roll.build(
+          { rolls: [{ options: { target: data.dc } }] },
+          { configure: true, options: { window: { title: `Flat d20 — DC ${data.dc}`, subtitle: actor.name } } },
+          { create: true, data: { speaker: ChatMessage.getSpeaker({ actor }), flavor: `Flat d20 Roll vs DC ${data.dc}` } }
+        );
+        if (rolls?.length) passed = rolls[0].total >= data.dc;
+      }
+
+      // If dialog was cancelled without rolling, unhook createChatMessage
+      if (!messageId) Hooks.off("createChatMessage", captureId);
+
+      const emit = () => game.socket.emit(SOCKET_EVENT, {
+        type:    "saveResult",
+        actorId: data.actorId,
+        passed
+      });
+
+      if (game.modules.get("dice-so-nice")?.active && messageId) {
+        let emitted = false;
+        const safeguard = setTimeout(() => { if (!emitted) { emitted = true; emit(); } }, 10_000);
+        Hooks.once("diceSoNiceRollComplete", (completedId) => {
+          if (completedId === messageId && !emitted) {
+            emitted = true;
+            clearTimeout(safeguard);
+            emit();
+          }
+        });
+      } else {
+        emit();
+      }
+    }
+
+    // GM receives result and resolves the pending promise
+    if (data?.type === "saveResult" && game.user.isGM) {
+      const pending = _pendingSaves.get(data.actorId);
+      if (!pending) return;
+      clearTimeout(pending.timer);
+      _pendingSaves.delete(data.actorId);
+      pending.resolve(data.passed);
+    }
+  });
+}
+
+function requestSave(actor, dc, saveType) {
+  return new Promise(resolve => {
+    const timer = setTimeout(() => {
+      _pendingSaves.delete(actor.id);
+      resolve(false);
+    }, 60_000);
+
+    _pendingSaves.set(actor.id, { resolve, timer });
+    game.socket.emit(SOCKET_EVENT, { type: "saveRequest", actorId: actor.id, dc, saveType });
+  });
+}
+
+function onlineOwner(actor) {
+  return game.users.find(u => !u.isGM && u.active && actor.testUserPermission(u, "OWNER"));
+}
+
+/* -------------------------------------------------- */
+/*  CON Save                                          */
+/* -------------------------------------------------- */
+
 export async function promptConSave(actor, dc) {
+  if (onlineOwner(actor)) return requestSave(actor, dc, "conSave");
+
   const rolls = await actor.rollSavingThrow(
     {
       ability: "con",
       rolls: [{ options: { target: Number(dc) } }]
     },
-    {
-      options: {
-        window: { subtitle: `DC ${dc}` }
-      }
-    },
-    {
-      data: {
-        flavor: `Constitution Saving Throw (DC ${dc})`
-      }
-    }
+    { options: { window: { subtitle: `DC ${dc}` } } },
+    { data: { flavor: `Constitution Saving Throw (DC ${dc})` } }
   );
 
   if (!rolls?.length) return false;
   return rolls[0].total >= Number(dc ?? 10);
 }
 
+/* -------------------------------------------------- */
+/*  Flat d20                                          */
+/* -------------------------------------------------- */
+
 export async function promptFlatD20(actor, dc) {
-  const roll   = await new Roll("1d20").evaluate();
-  const passed = roll.total >= dc;
+  if (onlineOwner(actor)) return requestSave(actor, dc, "flatD20");
 
-  await roll.toMessage({
-    speaker: ChatMessage.getSpeaker({ actor }),
-    flavor:  `Flat d20 Roll vs DC ${dc} — ${passed ? "Success" : "Failure"}`
-  });
+  const rolls = await CONFIG.Dice.D20Roll.build(
+    { rolls: [{ options: { target: dc } }] },
+    { configure: true, options: { window: { title: `Flat d20 — DC ${dc}`, subtitle: actor.name } } },
+    { create: true, data: { speaker: ChatMessage.getSpeaker({ actor }), flavor: `Flat d20 Roll vs DC ${dc}` } }
+  );
 
-  return passed;
+  if (!rolls?.length) return false;
+  return rolls[0].total >= dc;
 }
+
+/* -------------------------------------------------- */
+/*  Exhaustion change notification                    */
+/* -------------------------------------------------- */
 
 export async function notifyExhaustionChange(actor, previous, next) {
   if (next === previous) return;

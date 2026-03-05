@@ -1,6 +1,6 @@
 export const MODULE_ID = "combat-exhaustion";
 
-import { isActorInCombat, updateExhaustion, promptConSave, promptFlatD20 } from "./helpers.js";
+import { isActorInCombat, updateExhaustion, promptConSave, promptFlatD20, initSaveListener } from "./helpers.js";
 import { registerSettings } from "./config.js";
 import { initExhaustionOverride, OVERRIDE_UPDATE_GUARD } from "./exhaustionOverride.js";
 import { initLongRestQuality } from "./longRestQuality.js";
@@ -52,6 +52,7 @@ function saveEnabled() {
 /* -------------------------------------------------- */
 
 Hooks.once("ready", async () => {
+  initSaveListener();
   const MODULE_VERSION = game.modules.get(MODULE_ID)?.version;
 
   try {
