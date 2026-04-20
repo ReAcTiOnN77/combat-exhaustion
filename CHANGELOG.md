@@ -1,3 +1,10 @@
+##Version 1.7.0
+- Verified compatible with Foundry VTT v14 and D&D 5e v5.3.1
+  - Foundry v13 remains fully supported
+- Fixed Long Rest Quality batch dialog not appearing with Rest Recovery 4.0+
+- Fixed Dice So Nice timing desync when other modules posted chat messages during a save
+- Fixed exhaustion condition name and tooltip not refreshing on actor sheets after a ruleset swap
+
 ## Version 1.6.1
 - CON Save and Flat d20 now prompt the controlling player rather than the GM. If no player is online for that actor, the GM rolls as a fallback.
 - If Dice So Nice is active, exhaustion is now held until the dice animation completes before being applied.
