@@ -37,33 +37,45 @@ export function initSaveListener() {
       const actor = game.actors.get(data.actorId);
       if (!actor?.isOwner) return;
 
-      let passed   = false;
+      let passed    = false;
       let messageId = null;
 
-      // Capture the chat message ID created by the roll
-      const captureId = Hooks.once("createChatMessage", msg => { messageId = msg.id; });
+      // Capture the chat message ID created by the roll — scoped to this actor
+      // so we don't grab a message from some other module firing during the save.
+      let hookId;
+      const captureHandler = (msg) => {
+        if (msg?.speaker?.actor !== actor.id) return;
+        messageId = msg.id;
+        if (hookId !== undefined) {
+          Hooks.off("createChatMessage", hookId);
+          hookId = undefined;
+        }
+      };
+      hookId = Hooks.on("createChatMessage", captureHandler);
 
-      if (data.saveType === "conSave") {
-        const rolls = await actor.rollSavingThrow(
-          {
-            ability: "con",
-            rolls: [{ options: { target: data.dc } }]
-          },
-          { options: { window: { subtitle: `DC ${data.dc}` } } },
-          { data: { flavor: `Constitution Saving Throw (DC ${data.dc})` } }
-        );
-        if (rolls?.length) passed = rolls[0].total >= data.dc;
-      } else if (data.saveType === "flatD20") {
-        const rolls = await CONFIG.Dice.D20Roll.build(
-          { rolls: [{ options: { target: data.dc } }] },
-          { configure: true, options: { window: { title: `Flat d20 — DC ${data.dc}`, subtitle: actor.name } } },
-          { create: true, data: { speaker: ChatMessage.getSpeaker({ actor }), flavor: `Flat d20 Roll vs DC ${data.dc}` } }
-        );
-        if (rolls?.length) passed = rolls[0].total >= data.dc;
+      try {
+        if (data.saveType === "conSave") {
+          const rolls = await actor.rollSavingThrow(
+            {
+              ability: "con",
+              rolls: [{ options: { target: data.dc } }]
+            },
+            { options: { window: { subtitle: `DC ${data.dc}` } } },
+            { data: { flavor: `Constitution Saving Throw (DC ${data.dc})` } }
+          );
+          if (rolls?.length) passed = rolls[0].total >= data.dc;
+        } else if (data.saveType === "flatD20") {
+          const rolls = await CONFIG.Dice.D20Roll.build(
+            { rolls: [{ options: { target: data.dc } }] },
+            { configure: true, options: { window: { title: `Flat d20 — DC ${data.dc}`, subtitle: actor.name } } },
+            { create: true, data: { speaker: ChatMessage.getSpeaker({ actor }), flavor: `Flat d20 Roll vs DC ${data.dc}` } }
+          );
+          if (rolls?.length) passed = rolls[0].total >= data.dc;
+        }
+      } finally {
+        // If dialog was cancelled or no matching message ever fired, unhook.
+        if (hookId !== undefined) Hooks.off("createChatMessage", hookId);
       }
-
-      // If dialog was cancelled without rolling, unhook createChatMessage
-      if (!messageId) Hooks.off("createChatMessage", captureId);
 
       const emit = () => game.socket.emit(SOCKET_EVENT, {
         type:    "saveResult",

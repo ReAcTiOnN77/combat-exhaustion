@@ -105,6 +105,12 @@ function applyExhaustionUIText() {
 
   try { game.dnd5e?.effects?.rebuild?.(); } catch (_) {}
   try { game.dnd5e?.rules?.rebuildConditionEffects?.(); } catch (_) {}
+  // Re-render any open windows so the condition name/reference tooltip updates.
+  // Covers both AppV1 (ui.windows) and AppV2 (foundry.applications.instances).
+  try {
+    for (const app of Object.values(ui.windows ?? {})) app.render?.(false);
+    foundry.applications?.instances?.forEach?.(a => a.render?.(false));
+  } catch (_) {}
 }
 
 /* -------------------------------------------------- */
@@ -314,7 +320,7 @@ export function initExhaustionOverride() {
       configurable: true,
       enumerable: true,
       get() {
-        const stored = this._source?.description ?? this._data?.description ?? "";
+        const stored = this._source?.description ?? "";
         if (!swapOn()) return stored;
 
         const isExhaustion =
@@ -330,7 +336,6 @@ export function initExhaustionOverride() {
       },
       set(value) {
         if (this._source) this._source.description = value;
-        else if (this._data) this._data.description = value;
       },
     });
   });
