@@ -1,4 +1,4 @@
-##Version 1.7.0
+## Version 1.7.0
 - Verified compatible with Foundry VTT v14 and D&D 5e v5.3.1
   - Foundry v13 remains fully supported
 - Fixed Long Rest Quality batch dialog not appearing with Rest Recovery 4.0+
