@@ -228,7 +228,8 @@ export function initLongRestQuality() {
       proto._cex_longRest_patched = true;
       const _orig = proto.longRest;
 
-      proto.longRest = async function (config = {}, options = {}) {
+      proto.longRest = async function (...args) {
+        const config = args[0] ?? {};
         const alreadyQueued = getActorQuality(this.id) !== null;
         let cancelled = false;
 
@@ -251,7 +252,7 @@ export function initLongRestQuality() {
         }
 
         if (cancelled) return null;
-        return _orig.call(this, config, options);
+        return _orig.apply(this, args);
       };
     }
   });
@@ -296,8 +297,10 @@ export function initLongRestQuality() {
       }, { capture: true });
     };
 
-    Hooks.on("renderPromptRestApplication", bindRestRecovery);
-    Hooks.on("renderApplication", bindRestRecovery);
+    Hooks.on("renderPromptRestApplication",   bindRestRecovery); // AppV1 (older Rest Recovery)
+    Hooks.on("renderApplication",             bindRestRecovery); // AppV1 (older Rest Recovery)
+    Hooks.on("renderPromptRestApplicationV2", bindRestRecovery); // AppV2 (Rest Recovery 4.0+)
+    Hooks.on("renderApplicationV2",           bindRestRecovery); // AppV2 (fallback)
   }
 
   /* -------------------------------------------------- */
